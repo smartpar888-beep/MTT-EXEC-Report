@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>การบริหารจัดการน้ำเมืองทองธานี - รวมระดับน้ำ</title>
+    <title>การบริหารจัดการน้ำเมืองทองธานี - ภาพรวม</title>
     
     <!-- Google Font KANIT -->
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
@@ -21,21 +21,39 @@
         }
         
         /* -------------------------------------------------------- */
-        /* CRITICAL FIX: Body & HTML Layout for Mobile Scrolling */
+        /* CRITICAL: Layout for 100% Viewport Height (Fit to 1 Screen) */
         /* -------------------------------------------------------- */
         html, body {
             margin: 0;
             padding: 0;
-            min-height: 100vh; 
+            height: 100%; /* Ensure body takes full screen height */
+            overflow: hidden; /* Prevent body scroll, content scrolls internally */
         }
 
-        /* Container for the overall layout: uses flex-col to stack header/main/footer */
+        /* App container takes full screen height and stacks content vertically */
         .app-container {
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
+            height: 100vh;
         }
         
+        /* Main content area should fill the remaining space */
+        .main-content {
+            flex-grow: 1;
+            overflow-y: hidden; /* Prevents main from scrolling, its children will control scroll */
+            padding: 1rem 2rem 1rem 2rem; /* Adjusted padding for internal flow */
+        }
+
+        /* Container for the main table data - this is the element that scrolls */
+        .data-table-container {
+            flex-grow: 1;
+            overflow-y: auto; /* Allow scrolling within the table area */
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* shadow-lg */
+            background-color: white;
+            padding-bottom: 0.5rem;
+        }
+
         /* Center text in badge cells */
         .status-cell {
             text-align: center;
@@ -44,7 +62,7 @@
 </head>
 <body class="bg-gray-100">
     <div class="app-container">
-        <!-- Header -->
+        <!-- Header (Fixed Height) -->
         <header class="bg-white shadow-md p-4 sticky top-0 z-10">
             <div class="max-w-7xl mx-auto flex justify-between items-center">
                 <h1 class="text-2xl font-bold text-indigo-700 flex items-center">
@@ -60,52 +78,43 @@
             </div>
         </header>
 
-        <!-- Main Content -->
-        <main class="flex-grow max-w-7xl mx-auto p-4 md:p-8 w-full space-y-8">
+        <!-- Main Content (Fills remaining height) -->
+        <main class="main-content max-w-7xl mx-auto w-full flex flex-col space-y-4">
 
-            <!-- 1. Combined Water Level Data (Sheet 1 & 2) - MOVED TO TOP -->
+            <!-- 1. Combined Water Level Data Header (Fixed Height) -->
             <h2 class="text-xl font-semibold text-gray-700 border-b pb-2 flex items-center">
                 <i data-lucide="waves" class="w-5 h-5 mr-2 text-blue-600"></i>
                 ระดับน้ำทั้งหมด (เมืองทองธานี และ เจ้าพระยา)
             </h2>
-            <div id="data-sheet-combined-water-level" class="bg-white p-6 rounded-xl shadow-lg min-h-[200px] flex items-center justify-center text-gray-500">
-                <!-- Combined Data will be rendered here -->
-                กำลังโหลดข้อมูลระดับน้ำ...
+            
+            <!-- 2. Pump Status Summary Bar (Combined & Fixed Height) -->
+            <div class="bg-indigo-50 p-3 rounded-lg shadow-sm flex items-center justify-between text-sm font-semibold border border-indigo-200">
+                <div class="flex items-center text-indigo-700">
+                    <i data-lucide="gauge" class="w-4 h-4 mr-2"></i>
+                    สรุปสถานะเครื่องสูบน้ำ (Sheet 3)
+                </div>
+                <div class="flex space-x-6">
+                    <span class="flex items-center text-gray-700">
+                        สถานีทั้งหมด: <span id="total-pump-stations" class="text-indigo-800 ml-1 text-base font-extrabold">0</span> <span class="ml-1 font-medium text-xs text-gray-500">สถานี</span>
+                    </span>
+                    <span class="flex items-center text-green-600">
+                        สถานะปกติ: <span id="normal-pump-stations" class="text-green-800 ml-1 text-base font-extrabold">0</span> <span class="ml-1 font-medium text-xs text-gray-500">สถานี</span>
+                    </span>
+                </div>
             </div>
 
-            <!-- 2. Card Section for Sheet 3 (Pump Summary) - MOVED TO BOTTOM -->
-            <h2 class="text-xl font-semibold text-gray-700 border-b pb-2 pt-4 flex items-center">
-                <i data-lucide="gauge" class="w-5 h-5 mr-2 text-red-500"></i> 
-                สรุปสถานะเครื่องสูบน้ำ (Sheet 3)
-            </h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                
-                <!-- Total Stations Card -->
-                <div class="bg-white p-6 rounded-xl shadow-lg border-b-4 border-indigo-500 hover:shadow-xl transition duration-300">
-                    <p class="text-sm font-medium text-gray-500 mb-2 flex items-center">
-                         <i data-lucide="wrench" class="w-4 h-4 mr-1"></i>
-                        สถานีสูบน้ำทั้งหมด
-                    </p>
-                    <p id="total-pump-stations" class="text-5xl font-extrabold text-indigo-700">0</p>
-                    <p class="text-sm text-gray-400 mt-2">หน่วย: สถานี</p>
-                </div>
-
-                <!-- Normal Stations Card -->
-                <div class="bg-white p-6 rounded-xl shadow-lg border-b-4 border-green-500 hover:shadow-xl transition duration-300">
-                    <p class="text-sm font-medium text-gray-500 mb-2 flex items-center">
-                        <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i>
-                        สถานะปกติ
-                    </p>
-                    <p id="normal-pump-stations" class="text-5xl font-extrabold text-green-600">0</p>
-                    <p class="text-sm text-gray-400 mt-2">หน่วย: สถานี</p>
-                </div>
+            <!-- 3. Scrollable Data Table Container (Takes remaining height) -->
+            <div id="data-sheet-combined-water-level" class="data-table-container flex items-center justify-center text-gray-500">
+                <!-- Combined Data will be rendered here -->
+                <p class="text-center text-indigo-500 font-semibold flex items-center justify-center">
+                    <i data-lucide="loader" class="w-5 h-5 mr-2 animate-spin"></i> 
+                    กำลังโหลดข้อมูลระดับน้ำ...
+                </p>
             </div>
             
         </main>
     </div>
     
-    <!-- Modal (Omitted for brevity, assumed to be working) -->
-
     <!-- Firebase SDK Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -307,7 +316,7 @@
 
         /**
          * Sheet 2: กรองข้อมูลเฉพาะ 5 จุดวัดที่ระบุ
-         * **แก้ไข:** นำลอจิกการกรองที่ใช้ `includes` ออก เพื่อใช้ข้อมูลทั้งหมดที่ดึงมา (ถ้า CSV ส่งมา 5 จุด)
+         * **แก้ไข:** นำลอจิกการกรองที่ใช้ `includes` ออก เพื่อใช้ข้อมูลทั้งหมดที่ดึงมา
          * **แก้ไข:** สำหรับ "เขื่อนเจ้าพระยา" จะไม่แปลงค่าเป็นทศนิยม
          * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2
          * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source และหน่วยวัด
@@ -315,7 +324,7 @@
         function processSheet2Data(rawData) {
             console.log("Processing Sheet 2: Chaophraya locations (using all available data)...");
             
-            // NOTE: ไม่ต้อง filter ข้อมูล เพราะต้องการดึงมาทั้งหมดตามที่ Sheet 2 ส่งมา
+            // NOTE: ใช้ข้อมูลทั้งหมดที่ดึงมา
             return rawData.map(item => {
                 const station = item['จุดวัด'] || '-';
                 
@@ -393,14 +402,17 @@
          */
         function generateDataTableHtml(data, columns) {
             if (!data || data.length === 0) {
-                return '<p class="text-center text-gray-500">ไม่มีข้อมูลที่ต้องแสดง (โปรดตรวจสอบ URL และชื่อคอลัมน์ใน CSV)</p>';
+                return '<p class="p-6 text-center text-gray-500">ไม่มีข้อมูลที่ต้องแสดง (โปรดตรวจสอบ URL และชื่อคอลัมน์ใน CSV)</p>';
             }
 
             // 1. Header Row
+            // Sticky header inside the scrollable container
             const headerHtml = `
-                <tr>
-                    ${columns.map(col => `<th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${col}</th>`).join('')}
-                </tr>
+                <thead class="bg-gray-100 sticky top-0 z-5">
+                    <tr>
+                        ${columns.map(col => `<th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${col}</th>`).join('')}
+                    </tr>
+                </thead>
             `;
 
             // 2. Body Rows
@@ -419,7 +431,7 @@
             return `
                 <div class="overflow-x-auto w-full">
                     <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">${headerHtml}</thead>
+                        ${headerHtml}
                         <tbody class="bg-white divide-y divide-gray-200">${bodyHtml}</tbody>
                     </table>
                 </div>
@@ -434,7 +446,12 @@
             console.log("Starting dashboard data fetch (Combined)...");
             
             const combinedEl = document.getElementById('data-sheet-combined-water-level');
-            combinedEl.innerHTML = '<p class="text-center text-indigo-500 font-semibold flex items-center justify-center"><i data-lucide="loader" class="w-5 h-5 mr-2 animate-spin"></i> กำลังโหลดข้อมูลระดับน้ำ...</p>';
+            combinedEl.innerHTML = `
+                <p class="text-center text-indigo-500 font-semibold flex items-center justify-center p-6">
+                    <i data-lucide="loader" class="w-5 h-5 mr-2 animate-spin"></i> 
+                    กำลังโหลดข้อมูลระดับน้ำ...
+                </p>`;
+            lucide.createIcons(); // Ensure loading icon shows
 
             // 1. Fetch and Process Water Level Data (Sheet 1 & 2) concurrently
             let combinedData = [];
@@ -456,7 +473,6 @@
 
                 // Process Sheet 2 Data (ดึงมาทั้งหมดตามข้อมูลที่ CSV ส่งมา)
                 if (results[1].status === 'fulfilled') {
-                    // Check if rawData2 has entries. If not, log a specific warning.
                     if (results[1].value.length === 0) {
                          console.warn("Sheet 2 data loaded successfully but contained 0 records after CSV parsing. Check if the sheet is empty or the CSV export is correct.");
                     }
@@ -469,13 +485,12 @@
                 if (combinedData.length > 0) {
                     combinedEl.innerHTML = generateDataTableHtml(combinedData, combinedColumns);
                 } else {
-                    combinedEl.innerHTML = `<p class="text-center text-red-500 font-semibold">ไม่พบข้อมูลที่ต้องแสดง (Sheet 1 และ Sheet 2 ไม่สามารถโหลดข้อมูลได้ หรือไม่มีข้อมูลที่ผ่านการกรองแล้ว)</p>`;
+                    combinedEl.innerHTML = `<p class="p-6 text-center text-red-500 font-semibold">ไม่พบข้อมูลที่ต้องแสดง (Sheet 1 และ Sheet 2 ไม่สามารถโหลดข้อมูลได้ หรือไม่มีข้อมูลที่ผ่านการกรองแล้ว)</p>`;
                 }
 
             } catch (error) {
-                // This catch handles critical errors outside the Promise.allSettled, but the detailed errors are logged above
                 console.error("Error during overall water level data processing:", error);
-                combinedEl.innerHTML = `<p class="text-center text-red-500 font-semibold">เกิดข้อผิดพลาดในการโหลดข้อมูลระดับน้ำ</p>`;
+                combinedEl.innerHTML = `<p class="p-6 text-center text-red-500 font-semibold">เกิดข้อผิดพลาดในการโหลดข้อมูลระดับน้ำ</p>`;
             }
             
             // 2. Fetch and Process Pump Status Data (Sheet 3)
@@ -483,18 +498,21 @@
                 // แสดงสถานะโหลดก่อน
                 const totalEl = document.getElementById('total-pump-stations');
                 const normalEl = document.getElementById('normal-pump-stations');
-                if (totalEl) totalEl.textContent = '...';
-                if (normalEl) normalEl.textContent = '...';
+                if (totalEl) { totalEl.textContent = '...'; totalEl.classList.add('animate-pulse'); }
+                if (normalEl) { normalEl.textContent = '...'; normalEl.classList.add('animate-pulse'); }
                 
                 const rawData3 = await fetchGoogleSheetData(DATA_CONFIG[2].url);
-                processSheet3Data(rawData3); // Updates cards directly
+                processSheet3Data(rawData3); // Updates status bar directly
+                
+                if (totalEl) totalEl.classList.remove('animate-pulse');
+                if (normalEl) normalEl.classList.remove('animate-pulse');
             } catch (error) {
                 console.error("Error fetching pump status data:", error);
                 // แสดง Err หากดึงข้อมูลไม่ได้
                 const totalEl = document.getElementById('total-pump-stations');
                 const normalEl = document.getElementById('normal-pump-stations');
-                if (totalEl) totalEl.textContent = 'Err';
-                if (normalEl) normalEl.textContent = 'Err';
+                if (totalEl) { totalEl.textContent = 'Err'; totalEl.classList.remove('animate-pulse'); }
+                if (normalEl) { normalEl.textContent = 'Err'; normalEl.classList.remove('animate-pulse'); }
             }
 
             // Re-apply icons after content update
