@@ -264,10 +264,20 @@
          * @param {string | number} value - ค่าระดับน้ำ
          * @param {string} unit - หน่วยที่จะแสดง
          * @param {boolean} fixedTwoDecimal - กำหนดว่าจะต้องแปลงเป็นทศนิยม 2 ตำแหน่งหรือไม่
+         * @param {boolean} isChaophrayaDam - ตรวจสอบว่าเป็น เขื่อนเจ้าพระยา หรือไม่ เพื่อจัดการคอมม่า
          * @returns {string} ค่าพร้อมหน่วย
          */
-        function formatLevelWithUnit(value, unit, fixedTwoDecimal = true) {
-            const numValue = parseFloat(value);
+        function formatLevelWithUnit(value, unit, fixedTwoDecimal = true, isChaophrayaDam = false) {
+            let cleanValue = String(value);
+
+            // *CRITICAL FIX* สำหรับ เขื่อนเจ้าพระยา: ลบคอมมาออกก่อนแปลงเป็นตัวเลข
+            if (isChaophrayaDam) {
+                // If the CSV gives "2,500", remove the comma so parseFloat recognizes it as 2500, not 2.00
+                cleanValue = cleanValue.replace(/,/g, '');
+            }
+            
+            const numValue = parseFloat(cleanValue);
+
             if (isNaN(numValue)) {
                 return `- ${unit}`;
             }
@@ -275,8 +285,9 @@
             if (fixedTwoDecimal) {
                 return `${numValue.toFixed(2)} ${unit}`;
             } else {
-                // สำหรับค่าที่ไม่ต้องการการแปลง เช่น เขื่อนเจ้าพระยา (ลบ.ม./วิ)
-                return `${numValue} ${unit}`; 
+                // สำหรับค่าที่ไม่ต้องการการแปลงทศนิยม เช่น เขื่อนเจ้าพระยา
+                // ใช้ toLocaleString เพื่อใส่คอมมาคืนถ้าตัวเลขนั้นมีค่าหลักพัน (เพื่อให้ดูดีขึ้น)
+                return `${numValue.toLocaleString('th-TH')} ${unit}`; 
             }
         }
 
@@ -307,8 +318,8 @@
                 Source: 'เมืองทองธานี', 
                 'จุดวัด': item['จุดวัด'] || '-',
                 // ใช้ formatLevelWithUnit สำหรับ รทก./MSL. (Fixed to 2 decimals)
-                'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], DEFAULT_UNIT_LEVEL, true),
-                'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], DEFAULT_UNIT_LEVEL, true),
+                'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], DEFAULT_UNIT_LEVEL, true, false),
+                'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], DEFAULT_UNIT_LEVEL, true, false),
                 'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ']),
                 'ระดับการแจ้งเตือน': formatStatusBadge(item['ระดับการแจ้งเตือน']),
             }));
@@ -317,32 +328,33 @@
         /**
          * Sheet 2: กรองข้อมูลเฉพาะ 5 จุดวัดที่ระบุ
          * **แก้ไข:** นำลอจิกการกรองที่ใช้ `includes` ออก เพื่อใช้ข้อมูลทั้งหมดที่ดึงมา
-         * **แก้ไข:** สำหรับ "เขื่อนเจ้าพระยา" จะไม่แปลงค่าเป็นทศนิยม
+         * **แก้ไข:** สำหรับ "เขื่อนเจ้าพระยา" จะไม่แปลงค่าเป็นทศนิยม และจัดการคอมมา
          * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2
          * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source และหน่วยวัด
          */
         function processSheet2Data(rawData) {
             console.log("Processing Sheet 2: Chaophraya locations (using all available data)...");
             
-            // NOTE: ใช้ข้อมูลทั้งหมดที่ดึงมา
             return rawData.map(item => {
                 const station = item['จุดวัด'] || '-';
                 
                 // กำหนดหน่วยวัดและรูปแบบการแสดงผล
                 let unit = DEFAULT_UNIT_LEVEL;
                 let fixedTwoDecimal = true;
+                let isChaophraya = false;
 
                 if (station === 'เขื่อนเจ้าพระยา') {
                     unit = CHAOPHRAYA_UNIT_LEVEL;
                     fixedTwoDecimal = false; // ไม่แปลงค่าเป็นทศนิยม 2 ตำแหน่ง
+                    isChaophraya = true; // ตั้งค่าสถานะเพื่อจัดการคอมมาใน formatLevelWithUnit
                 }
                 
                 return {
                     Source: 'แม่น้ำเจ้าพระยา', 
                     'จุดวัด': station,
                     // เพิ่มหน่วยวัดตามเงื่อนไข
-                    'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], unit, fixedTwoDecimal),
-                    'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], unit, fixedTwoDecimal),
+                    'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], unit, fixedTwoDecimal, isChaophraya),
+                    'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], unit, fixedTwoDecimal, isChaophraya),
                     'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ']),
                     'ระดับการแจ้งเตือน': formatStatusBadge(item['ระดับการแจ้งเตือน']),
                 };
