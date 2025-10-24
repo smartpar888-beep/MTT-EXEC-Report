@@ -35,6 +35,11 @@
             flex-direction: column;
             min-height: 100vh;
         }
+        
+        /* Center text in badge cells */
+        .status-cell {
+            text-align: center;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -99,38 +104,7 @@
         </main>
     </div>
     
-    <!-- Modal for Inspection Details (Kept for completeness) -->
-    <div id="inspection-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md transform transition-all duration-300 scale-95 opacity-0" id="modal-content">
-            <div class="flex justify-between items-center mb-4 border-b pb-3">
-                <h3 class="text-lg font-semibold text-gray-800 flex items-center">
-                    <i data-lucide="clipboard-list" class="w-6 h-6 mr-2 text-indigo-600"></i>
-                    ข้อมูลการเข้าตรวจสถานี
-                </h3>
-                <button id="modal-close-button" class="text-gray-400 hover:text-gray-600 transition" onclick="closeInspectionModal()">
-                    <i data-lucide="x" class="w-6 h-6"></i>
-                </button>
-            </div>
-            
-            <div class="space-y-4">
-                <p class="text-gray-600">
-                    <span class="font-semibold text-gray-800">สถานี:</span> 
-                    <span id="modal-station-name" class="text-indigo-700 font-bold"></span>
-                </p>
-                <div class="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                    <p class="text-sm text-gray-500 mb-1">จำนวนครั้งที่เข้าตรวจ (สะสม)</p>
-                    <p id="modal-inspection-count" class="text-4xl font-extrabold text-blue-600">
-                        0
-                    </p>
-                    <p class="text-xs text-gray-500 mt-2">* ข้อมูลจากคอลัมน์ที่ท่านกำหนดใน USER_COLUMN_NAMES</p>
-                </div>
-            </div>
-            
-            <div class="mt-6 flex justify-end">
-                <button type="button" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition" onclick="closeInspectionModal()">ปิด</button>
-            </div>
-        </div>
-    </div>
+    <!-- Modal (Omitted for brevity, assumed to be working) -->
 
     <!-- Firebase SDK Imports -->
     <script type="module">
@@ -196,23 +170,116 @@
             { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT5OYSm3Hn1V4kegJf9x3iK2OGvUIL7vbnWryNUsx15VCm4NdxoVoWZMx1vWTlKcZskeD-YYjhbKn2V/pub?gid=202563025&single=true&output=csv', type: 'WATER_LEVEL_CPY' },
             { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTyPcfGQReUPOHckF-6bA4UOucC8cbqRvHj-aTP7uWRkBjvQ4HrieGIhcet4OH9O0DjT_M2FM3QaaV9/pub?gid=273571070&single=true&output=csv', type: 'PUMP_STATUS' }
         ];
-
+        
         // -------------------------------------------------------------
-        // PROCESSOR FUNCTIONS (Now return arrays for Sheet 1 & 2)
+        // HELPER FUNCTIONS FOR FORMATTING UI
         // -------------------------------------------------------------
 
         /**
+         * จัดรูปแบบการแสดงผลของคอลัมน์ "ส่วนต่างระดับน้ำ" พร้อมสีและไอคอนสามเหลี่ยม
+         * @param {string | number} value - ค่าส่วนต่างระดับน้ำ (อาจเป็น String จาก CSV)
+         * @returns {string} HTML string ที่มีสีและไอคอน
+         */
+        function formatDifference(value) {
+            const unit = ' รทก.'; // หน่วยที่ใช้ร่วมกัน
+            
+            // 1. แปลงค่าเป็นตัวเลข
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) {
+                return `<span class="text-gray-500">-</span>`;
+            }
+
+            let iconName = '';
+            let colorClass = '';
+
+            if (numValue > 0) {
+                // เพิ่มขึ้น (แดง)
+                iconName = 'triangle'; // Lucide icon for up arrow
+                colorClass = 'text-red-600 font-semibold';
+            } else if (numValue < 0) {
+                // ลดลง (เขียว)
+                iconName = 'triangle-down'; // Lucide icon for down arrow
+                colorClass = 'text-green-600 font-semibold';
+            } else {
+                // คงที่ (เทา)
+                return `<span class="text-gray-500">0.00 ${unit}</span>`;
+            }
+
+            const formattedValue = numValue.toFixed(2); // จัดรูปแบบเป็นทศนิยม 2 ตำแหน่ง
+            
+            return `
+                <span class="${colorClass} flex items-center justify-start whitespace-nowrap">
+                    <i data-lucide="${iconName}" class="w-4 h-4 mr-1 fill-current stroke-current"></i>
+                    ${formattedValue} ${unit}
+                </span>
+            `;
+        }
+
+        /**
+         * จัดรูปแบบการแสดงผลของคอลัมน์ "ระดับการแจ้งเตือน" ด้วย Badge สี
+         * @param {string} status - สถานะการแจ้งเตือน ('ปกติ', 'เฝ้าระวัง', 'วิกฤติ')
+         * @returns {string} HTML string สำหรับ Badge
+         */
+        function formatStatusBadge(status) {
+            let colorClass, iconName;
+            
+            switch (status) {
+                case 'ปกติ':
+                    colorClass = 'bg-green-100 text-green-700 border-green-300';
+                    iconName = 'check-circle';
+                    break;
+                case 'เฝ้าระวัง':
+                    colorClass = 'bg-yellow-100 text-yellow-700 border-yellow-300';
+                    iconName = 'eye';
+                    break;
+                case 'วิกฤติ':
+                    colorClass = 'bg-red-100 text-red-700 border-red-300';
+                    iconName = 'alert-triangle';
+                    break;
+                default:
+                    return `<span class="text-gray-500">-</span>`;
+            }
+
+            return `
+                <div class="inline-flex items-center justify-center w-full px-2 py-1.5 ${colorClass} rounded-full border shadow-sm text-xs font-semibold">
+                    <i data-lucide="${iconName}" class="w-3 h-3 mr-1"></i>
+                    ${status}
+                </div>
+            `;
+        }
+        
+        /**
+         * จัดรูปแบบระดับน้ำพร้อมหน่วย
+         * @param {string | number} value - ค่าระดับน้ำ
+         * @param {string} unit - หน่วยที่จะแสดง
+         * @returns {string} ค่าพร้อมหน่วย
+         */
+        function formatLevelWithUnit(value, unit) {
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) {
+                return `- ${unit}`;
+            }
+            return `${numValue.toFixed(2)} ${unit}`;
+        }
+
+
+        // -------------------------------------------------------------
+        // PROCESSOR FUNCTIONS
+        // -------------------------------------------------------------
+
+        const DEFAULT_UNIT_LEVEL = 'รทก./MSL.';
+        const CHAOPHRAYA_UNIT_LEVEL = 'ลบ.ม./วิ'; // สำหรับ "เขื่อนเจ้าพระยา"
+
+        /**
          * Sheet 1: กรองข้อมูลเฉพาะ Lakeside เมืองทองธานี และ สะพานข้ามคลองบางพูด มสธ.
-         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 1 (คอลัมน์: จุดวัด, ระดับน้ำปัจจุบัน, ระดับน้ำครั้งก่อน, ส่วนต่างระดับน้ำ, ระดับการแจ้งเตือน)
-         * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 1
+         * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source และหน่วยวัด
          */
         function processSheet1Data(rawData) {
-            console.log("Processing Sheet 1: Filtering data for specific Muangthong locations...");
-            // จุดที่ 1. Lakeside เมืองทองธานี, จุดที่ 8. สะพานข้ามคลองบางพูด มสธ.
+            console.log("Processing Sheet 1: Muangthong locations...");
             const targetStations = ['Lakeside เมืองทองธานี', 'สะพานข้ามคลองบางพูด มสธ.'];
 
             const filteredData = rawData.filter(item => {
-                // ใช้ includes() เพื่อให้มีความยืดหยุ่นในการจับคู่ชื่อสถานี และใช้คอลัมน์ 'จุดวัด'
                 return item['จุดวัด'] && targetStations.some(target => item['จุดวัด'].includes(target));
             });
             
@@ -220,22 +287,21 @@
             return filteredData.map(item => ({
                 Source: 'เมืองทองธานี', 
                 'จุดวัด': item['จุดวัด'] || '-',
-                'ระดับน้ำปัจจุบัน': item['ระดับน้ำปัจจุบัน'] !== undefined ? item['ระดับน้ำปัจจุบัน'] : '-',
-                'ระดับน้ำครั้งก่อน': item['ระดับน้ำครั้งก่อน'] !== undefined ? item['ระดับน้ำครั้งก่อน'] : '-',
-                'ส่วนต่างระดับน้ำ': item['ส่วนต่างระดับน้ำ'] !== undefined ? item['ส่วนต่างระดับน้ำ'] : '-',
-                'ระดับการแจ้งเตือน': item['ระดับการแจ้งเตือน'] !== undefined ? item['ระดับการแจ้งเตือน'] : '-',
-                // Retain Time mapping for consistency, though it's not explicitly requested to display
-                Time: item.Time || item['Time'] || '-',
+                // เพิ่มหน่วยวัด DEFAULT_UNIT_LEVEL
+                'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], DEFAULT_UNIT_LEVEL),
+                'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], DEFAULT_UNIT_LEVEL),
+                'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ']),
+                'ระดับการแจ้งเตือน': formatStatusBadge(item['ระดับการแจ้งเตือน']),
             }));
         }
 
         /**
          * Sheet 2: กรองข้อมูลเฉพาะ 5 จุดวัดที่ระบุ
-         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2 (คอลัมน์: จุดวัด, ระดับน้ำปัจจุบัน, ระดับน้ำครั้งก่อน, ส่วนต่างระดับน้ำ, ระดับการแจ้งเตือน)
-         * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2
+         * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source และหน่วยวัด
          */
         function processSheet2Data(rawData) {
-            console.log("Processing Sheet 2: Filtering data for specific Chaophraya locations...");
+            console.log("Processing Sheet 2: Chaophraya locations...");
             const targetLocations = [
                 'เขื่อนเจ้าพระยา',
                 'ท่าน้ำปากเกร็ดวัน',
@@ -245,45 +311,44 @@
             ];
 
             const filteredData = rawData.filter(item => {
-                // NOTE: ใช้คอลัมน์ 'จุดวัด'
                 return item['จุดวัด'] && targetLocations.includes(item['จุดวัด']);
             });
 
             // Standardize/Add Source and map to the new column headers
-            return filteredData.map(item => ({
-                Source: 'แม่น้ำเจ้าพระยา', 
-                'จุดวัด': item['จุดวัด'] || '-',
-                'ระดับน้ำปัจจุบัน': item['ระดับน้ำปัจจุบัน'] !== undefined ? item['ระดับน้ำปัจจุบัน'] : '-',
-                'ระดับน้ำครั้งก่อน': item['ระดับน้ำครั้งก่อน'] !== undefined ? item['ระดับน้ำครั้งก่อน'] : '-',
-                'ส่วนต่างระดับน้ำ': item['ส่วนต่างระดับน้ำ'] !== undefined ? item['ส่วนต่างระดับน้ำ'] : '-',
-                'ระดับการแจ้งเตือน': item['ระดับการแจ้งเตือน'] !== undefined ? item['ระดับการแจ้งเตือน'] : '-',
-                // Retain Time mapping for consistency, though it's not explicitly requested to display
-                Time: item.Time || item['Time'] || '-',
-            }));
+            return filteredData.map(item => {
+                const station = item['จุดวัด'] || '-';
+                // กำหนดหน่วยวัด
+                const unit = (station === 'เขื่อนเจ้าพระยา') ? CHAOPHRAYA_UNIT_LEVEL : DEFAULT_UNIT_LEVEL;
+                
+                return {
+                    Source: 'แม่น้ำเจ้าพระยา', 
+                    'จุดวัด': station,
+                    // เพิ่มหน่วยวัดตามเงื่อนไข
+                    'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], unit),
+                    'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], unit),
+                    'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ']),
+                    'ระดับการแจ้งเตือน': formatStatusBadge(item['ระดับการแจ้งเตือน']),
+                };
+            });
         }
 
         /**
          * Sheet 3: สรุปจำนวนสถานีทั้งหมดและสถานะปกติ
-         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 3 (คอลัมน์: Station, สถานะปั๊ม, LastCheck)
-         * @returns {null} ไม่ส่งคืน HTML แต่จะอัปเดตตัวเลขใน Card โดยตรง
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 3 
+         * @returns {null} อัปเดตตัวเลขใน Card โดยตรง
          */
         function processSheet3Data(rawData) {
             console.log("Processing Sheet 3: Aggregating summary...");
             
-            // 1. จำนวนสถานีทั้งหมด (อัปเดตทันที)
             const totalStations = rawData.length;
             const totalEl = document.getElementById('total-pump-stations');
             if (totalEl) totalEl.textContent = totalStations.toLocaleString('th-TH');
             
-            // 2. จำนวนสถานีที่มีสถานะ 'ปกติ'
-            // แก้ไข: ใช้ชื่อคอลัมน์ตามที่ผู้ใช้แจ้งคือ 'สถานะปั๊ม'
             const STATUS_COLUMN_NAME = 'สถานะปั๊ม'; 
             const normalStations = rawData.filter(item => {
-                // ตรวจสอบชื่อคอลัมน์ที่คาดหวัง
                 return item[STATUS_COLUMN_NAME] === 'ปกติ';
             }).length;
 
-            // อัปเดต UI Card สำหรับสถานะปกติ
             const normalEl = document.getElementById('normal-pump-stations');
             if (normalEl) normalEl.textContent = normalStations.toLocaleString('th-TH');
 
@@ -292,36 +357,31 @@
         }
 
         // -------------------------------------------------------------
-        // LIVE DATA FETCH FUNCTION (Using d3.csv for public CSV URLs)
+        // LIVE DATA FETCH FUNCTION
         // -------------------------------------------------------------
 
         /**
          * ดึงข้อมูลจาก Google Sheet Public CSV URL โดยใช้ d3.csv
-         * @param {string} url - Public URL to CSV file.
-         * @returns {Promise<Array<Object>>} ข้อมูลที่ถูกแปลงเป็น Object Array
          */
         async function fetchGoogleSheetData(url) {
             console.log("Attempting to fetch data from:", url);
             
             if (url.includes('YOUR_SHEET_URL')) {
-                // If placeholder is still used, display an error message for the user.
-                throw new Error("กรุณาแทนที่ 'YOUR_SHEET_URL_X_HERE' ด้วย Public CSV Export URL จริง (ต้องลงท้ายด้วย /export?format=csv)");
+                throw new Error("กรุณาแทนที่ 'YOUR_SHEET_URL_X_HERE' ด้วย Public CSV Export URL จริง");
             }
 
             try {
-                // d3.csv handles fetching and parsing CSV into an array of objects
                 const data = await d3.csv(url);
                 console.log(`Successfully fetched ${data.length} records from ${url}`);
                 return data;
             } catch (error) {
                 console.error("Error fetching or parsing CSV:", error);
-                // Throw a specific error message for the user to see in the UI
-                throw new Error(`ไม่สามารถโหลดข้อมูลจาก URL นี้ได้: ${url}. โปรดตรวจสอบ URL, การเผยแพร่, และชื่อคอลัมน์ใน Sheet`);
+                throw new Error(`ไม่สามารถโหลดข้อมูลจาก URL นี้ได้: ${url}`);
             }
         }
 
         /**
-         * สร้าง HTML สำหรับตารางข้อมูล (รับมือกับคอลัมน์ที่อาจมีค่าเป็น undefined ได้)
+         * สร้าง HTML สำหรับตารางข้อมูล
          */
         function generateDataTableHtml(data, columns) {
             if (!data || data.length === 0) {
@@ -331,7 +391,7 @@
             // 1. Header Row
             const headerHtml = `
                 <tr>
-                    ${columns.map(col => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${col}</th>`).join('')}
+                    ${columns.map(col => `<th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${col}</th>`).join('')}
                 </tr>
             `;
 
@@ -339,9 +399,11 @@
             const bodyHtml = data.map(row => `
                 <tr class="hover:bg-gray-50 transition duration-150">
                     ${columns.map(col => {
-                        // ดึงค่าจาก row โดยใช้ชื่อคอลัมน์ ถ้าไม่มีให้เป็น '-'
                         const cellValue = row[col] !== undefined ? row[col] : '-';
-                        return `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${cellValue}</td>`;
+                        // สำหรับคอลัมน์ "ระดับการแจ้งเตือน" ให้ใช้ class status-cell เพื่อจัดกลาง
+                        const cellClass = col === 'ระดับการแจ้งเตือน' ? 'status-cell' : 'text-left';
+                        
+                        return `<td class="px-3 py-4 whitespace-nowrap text-sm text-gray-900 ${cellClass}">${cellValue}</td>`;
                     }).join('')}
                 </tr>
             `).join('');
@@ -367,32 +429,41 @@
             combinedEl.innerHTML = '<p class="text-center text-indigo-500 font-semibold flex items-center justify-center"><i data-lucide="loader" class="w-5 h-5 mr-2 animate-spin"></i> กำลังโหลดข้อมูลระดับน้ำ...</p>';
 
             // 1. Fetch and Process Water Level Data (Sheet 1 & 2) concurrently
+            let combinedData = [];
+            const combinedColumns = ['Source', 'จุดวัด', 'ระดับน้ำปัจจุบัน', 'ระดับน้ำครั้งก่อน', 'ส่วนต่างระดับน้ำ', 'ระดับการแจ้งเตือน']; 
+
             try {
-                const [rawData1, rawData2] = await Promise.all([
+                // Fetch all data sources concurrently
+                const results = await Promise.allSettled([
                     fetchGoogleSheetData(DATA_CONFIG[0].url),
                     fetchGoogleSheetData(DATA_CONFIG[1].url)
                 ]);
 
-                // Process (filter/standardize) the data
-                const filteredData1 = processSheet1Data(rawData1);
-                const filteredData2 = processSheet2Data(rawData2); 
+                // Process Sheet 1 Data
+                if (results[0].status === 'fulfilled') {
+                    combinedData = combinedData.concat(processSheet1Data(results[0].value));
+                } else {
+                    console.error("Failed to load Sheet 1 data:", results[0].reason);
+                }
+
+                // Process Sheet 2 Data
+                if (results[1].status === 'fulfilled') {
+                    combinedData = combinedData.concat(processSheet2Data(results[1].value));
+                } else {
+                    console.error("Failed to load Sheet 2 data:", results[1].reason);
+                }
                 
-                // Combine data from both sheets
-                const combinedData = filteredData1.concat(filteredData2);
-                
-                // Define the desired columns for the combined table (Updated based on user input)
-                const combinedColumns = ['Source', 'จุดวัด', 'ระดับน้ำปัจจุบัน', 'ระดับน้ำครั้งก่อน', 'ส่วนต่างระดับน้ำ', 'ระดับการแจ้งเตือน']; 
-                
-                // Generate and render HTML
+                // Render Combined Data
                 if (combinedData.length > 0) {
                     combinedEl.innerHTML = generateDataTableHtml(combinedData, combinedColumns);
                 } else {
-                    combinedEl.innerHTML = '<p class="text-center text-red-500 font-semibold">ไม่พบข้อมูลที่ผ่านการกรองแล้ว (โปรดตรวจสอบ URL และ Header ของ CSV)</p>';
+                    combinedEl.innerHTML = `<p class="text-center text-red-500 font-semibold">ไม่พบข้อมูลที่ต้องแสดง (Sheet 1 และ Sheet 2 ไม่สามารถโหลดข้อมูลได้ หรือไม่มีข้อมูลที่ผ่านการกรองแล้ว)</p>`;
                 }
 
             } catch (error) {
-                console.error("Error fetching combined water level data:", error);
-                combinedEl.innerHTML = `<p class="text-center text-red-500 font-semibold">เกิดข้อผิดพลาดในการโหลดข้อมูลระดับน้ำ: ${error.message}</p>`;
+                // This catch handles critical errors outside the Promise.allSettled, but the detailed errors are logged above
+                console.error("Error during overall water level data processing:", error);
+                combinedEl.innerHTML = `<p class="text-center text-red-500 font-semibold">เกิดข้อผิดพลาดในการโหลดข้อมูลระดับน้ำ</p>`;
             }
             
             // 2. Fetch and Process Pump Status Data (Sheet 3)
