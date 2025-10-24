@@ -229,10 +229,12 @@
                     iconName = 'check-circle';
                     break;
                 case 'เฝ้าระวัง':
+                    // ใช้สีเหลืองอ่อนและไอคอนตาสำหรับ 'เฝ้าระวัง'
                     colorClass = 'bg-yellow-100 text-yellow-700 border-yellow-300';
                     iconName = 'eye';
                     break;
                 case 'วิกฤติ':
+                    // ใช้สีแดงและไอคอนแจ้งเตือนสำหรับ 'วิกฤติ'
                     colorClass = 'bg-red-100 text-red-700 border-red-300';
                     iconName = 'alert-triangle';
                     break;
@@ -252,14 +254,21 @@
          * จัดรูปแบบระดับน้ำพร้อมหน่วย
          * @param {string | number} value - ค่าระดับน้ำ
          * @param {string} unit - หน่วยที่จะแสดง
+         * @param {boolean} fixedTwoDecimal - กำหนดว่าจะต้องแปลงเป็นทศนิยม 2 ตำแหน่งหรือไม่
          * @returns {string} ค่าพร้อมหน่วย
          */
-        function formatLevelWithUnit(value, unit) {
+        function formatLevelWithUnit(value, unit, fixedTwoDecimal = true) {
             const numValue = parseFloat(value);
             if (isNaN(numValue)) {
                 return `- ${unit}`;
             }
-            return `${numValue.toFixed(2)} ${unit}`;
+            
+            if (fixedTwoDecimal) {
+                return `${numValue.toFixed(2)} ${unit}`;
+            } else {
+                // สำหรับค่าที่ไม่ต้องการการแปลง เช่น เขื่อนเจ้าพระยา (ลบ.ม./วิ)
+                return `${numValue} ${unit}`; 
+            }
         }
 
 
@@ -280,6 +289,7 @@
             const targetStations = ['Lakeside เมืองทองธานี', 'สะพานข้ามคลองบางพูด มสธ.'];
 
             const filteredData = rawData.filter(item => {
+                // ใช้ includes() เพื่อให้มีความยืดหยุ่นในการจับคู่ชื่อสถานี
                 return item['จุดวัด'] && targetStations.some(target => item['จุดวัด'].includes(target));
             });
             
@@ -287,9 +297,9 @@
             return filteredData.map(item => ({
                 Source: 'เมืองทองธานี', 
                 'จุดวัด': item['จุดวัด'] || '-',
-                // เพิ่มหน่วยวัด DEFAULT_UNIT_LEVEL
-                'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], DEFAULT_UNIT_LEVEL),
-                'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], DEFAULT_UNIT_LEVEL),
+                // ใช้ formatLevelWithUnit สำหรับ รทก./MSL. (Fixed to 2 decimals)
+                'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], DEFAULT_UNIT_LEVEL, true),
+                'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], DEFAULT_UNIT_LEVEL, true),
                 'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ']),
                 'ระดับการแจ้งเตือน': formatStatusBadge(item['ระดับการแจ้งเตือน']),
             }));
@@ -297,39 +307,37 @@
 
         /**
          * Sheet 2: กรองข้อมูลเฉพาะ 5 จุดวัดที่ระบุ
+         * **แก้ไข:** นำลอจิกการกรองที่ใช้ `includes` ออก เพื่อใช้ข้อมูลทั้งหมดที่ดึงมา (ถ้า CSV ส่งมา 5 จุด)
+         * **แก้ไข:** สำหรับ "เขื่อนเจ้าพระยา" จะไม่แปลงค่าเป็นทศนิยม
          * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2
          * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source และหน่วยวัด
          */
         function processSheet2Data(rawData) {
-            console.log("Processing Sheet 2: Chaophraya locations...");
-            const targetLocations = [
-                'เขื่อนเจ้าพระยา',
-                'ท่าน้ำปากเกร็ดวัน',
-                'เกาะพญาเจ่ง',
-                'ประตูน้ำปากเกร็ด 13',
-                'คลองบางพูดเชื่อมคลองส่วย'
-            ];
-
-            const filteredData = rawData.filter(item => {
-                return item['จุดวัด'] && targetLocations.includes(item['จุดวัด']);
-            });
-
-            // Standardize/Add Source and map to the new column headers
-            return filteredData.map(item => {
+            console.log("Processing Sheet 2: Chaophraya locations (using all available data)...");
+            
+            // NOTE: ไม่ต้อง filter ข้อมูล เพราะต้องการดึงมาทั้งหมดตามที่ Sheet 2 ส่งมา
+            return rawData.map(item => {
                 const station = item['จุดวัด'] || '-';
-                // กำหนดหน่วยวัด
-                const unit = (station === 'เขื่อนเจ้าพระยา') ? CHAOPHRAYA_UNIT_LEVEL : DEFAULT_UNIT_LEVEL;
+                
+                // กำหนดหน่วยวัดและรูปแบบการแสดงผล
+                let unit = DEFAULT_UNIT_LEVEL;
+                let fixedTwoDecimal = true;
+
+                if (station === 'เขื่อนเจ้าพระยา') {
+                    unit = CHAOPHRAYA_UNIT_LEVEL;
+                    fixedTwoDecimal = false; // ไม่แปลงค่าเป็นทศนิยม 2 ตำแหน่ง
+                }
                 
                 return {
                     Source: 'แม่น้ำเจ้าพระยา', 
                     'จุดวัด': station,
                     // เพิ่มหน่วยวัดตามเงื่อนไข
-                    'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], unit),
-                    'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], unit),
+                    'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], unit, fixedTwoDecimal),
+                    'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], unit, fixedTwoDecimal),
                     'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ']),
                     'ระดับการแจ้งเตือน': formatStatusBadge(item['ระดับการแจ้งเตือน']),
                 };
-            });
+            }).filter(item => item['จุดวัด'] !== '-'); // กรองรายการที่ไม่มีชื่อจุดวัดออก
         }
 
         /**
@@ -446,8 +454,12 @@
                     console.error("Failed to load Sheet 1 data:", results[0].reason);
                 }
 
-                // Process Sheet 2 Data
+                // Process Sheet 2 Data (ดึงมาทั้งหมดตามข้อมูลที่ CSV ส่งมา)
                 if (results[1].status === 'fulfilled') {
+                    // Check if rawData2 has entries. If not, log a specific warning.
+                    if (results[1].value.length === 0) {
+                         console.warn("Sheet 2 data loaded successfully but contained 0 records after CSV parsing. Check if the sheet is empty or the CSV export is correct.");
+                    }
                     combinedData = combinedData.concat(processSheet2Data(results[1].value));
                 } else {
                     console.error("Failed to load Sheet 2 data:", results[1].reason);
