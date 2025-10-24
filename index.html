@@ -203,7 +203,7 @@
 
         /**
          * Sheet 1: กรองข้อมูลเฉพาะ Lakeside เมืองทองธานี และ สะพานข้ามคลองบางพูด มสธ.
-         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 1 (คอลัมน์: Station, Level, Time, Status)
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 1 (คอลัมน์: จุดวัด, ระดับน้ำปัจจุบัน, ระดับน้ำครั้งก่อน, ส่วนต่างระดับน้ำ, ระดับการแจ้งเตือน)
          * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source
          */
         function processSheet1Data(rawData) {
@@ -212,23 +212,26 @@
             const targetStations = ['Lakeside เมืองทองธานี', 'สะพานข้ามคลองบางพูด มสธ.'];
 
             const filteredData = rawData.filter(item => {
-                // ใช้ includes() เพื่อให้มีความยืดหยุ่นในการจับคู่ชื่อสถานี
-                return item.Station && targetStations.some(target => item.Station.includes(target));
+                // ใช้ includes() เพื่อให้มีความยืดหยุ่นในการจับคู่ชื่อสถานี และใช้คอลัมน์ 'จุดวัด'
+                return item['จุดวัด'] && targetStations.some(target => item['จุดวัด'].includes(target));
             });
             
-            // Standardize/Add Source for combined view
-            // NOTE: Check your CSV headers. Assuming 'Station', 'Level', 'Time'
+            // Standardize/Add Source and map to the new column headers
             return filteredData.map(item => ({
                 Source: 'เมืองทองธานี', 
-                Station: item.Station || '-',
-                'ระดับน้ำ (ม.)': item.Level !== undefined ? item.Level : '-',
-                Time: item.Time || '-',
+                'จุดวัด': item['จุดวัด'] || '-',
+                'ระดับน้ำปัจจุบัน': item['ระดับน้ำปัจจุบัน'] !== undefined ? item['ระดับน้ำปัจจุบัน'] : '-',
+                'ระดับน้ำครั้งก่อน': item['ระดับน้ำครั้งก่อน'] !== undefined ? item['ระดับน้ำครั้งก่อน'] : '-',
+                'ส่วนต่างระดับน้ำ': item['ส่วนต่างระดับน้ำ'] !== undefined ? item['ส่วนต่างระดับน้ำ'] : '-',
+                'ระดับการแจ้งเตือน': item['ระดับการแจ้งเตือน'] !== undefined ? item['ระดับการแจ้งเตือน'] : '-',
+                // Retain Time mapping for consistency, though it's not explicitly requested to display
+                Time: item.Time || item['Time'] || '-',
             }));
         }
 
         /**
          * Sheet 2: กรองข้อมูลเฉพาะ 5 จุดวัดที่ระบุ
-         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2 (คอลัมน์: Location, Depth, Time)
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2 (คอลัมน์: จุดวัด, ระดับน้ำปัจจุบัน, ระดับน้ำครั้งก่อน, ส่วนต่างระดับน้ำ, ระดับการแจ้งเตือน)
          * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source
          */
         function processSheet2Data(rawData) {
@@ -242,17 +245,20 @@
             ];
 
             const filteredData = rawData.filter(item => {
-                // NOTE: Check your CSV header. Assuming 'Location'
-                return item.Location && targetLocations.includes(item.Location);
+                // NOTE: ใช้คอลัมน์ 'จุดวัด'
+                return item['จุดวัด'] && targetLocations.includes(item['จุดวัด']);
             });
 
-            // Standardize/Add Source for combined view
-            // NOTE: Check your CSV headers. Assuming 'Location', 'Depth', 'Time'
+            // Standardize/Add Source and map to the new column headers
             return filteredData.map(item => ({
                 Source: 'แม่น้ำเจ้าพระยา', 
-                Station: item.Location || '-',
-                'ระดับน้ำ (ม.)': item.Depth !== undefined ? item.Depth : '-',
-                Time: item.Time || '-',
+                'จุดวัด': item['จุดวัด'] || '-',
+                'ระดับน้ำปัจจุบัน': item['ระดับน้ำปัจจุบัน'] !== undefined ? item['ระดับน้ำปัจจุบัน'] : '-',
+                'ระดับน้ำครั้งก่อน': item['ระดับน้ำครั้งก่อน'] !== undefined ? item['ระดับน้ำครั้งก่อน'] : '-',
+                'ส่วนต่างระดับน้ำ': item['ส่วนต่างระดับน้ำ'] !== undefined ? item['ส่วนต่างระดับน้ำ'] : '-',
+                'ระดับการแจ้งเตือน': item['ระดับการแจ้งเตือน'] !== undefined ? item['ระดับการแจ้งเตือน'] : '-',
+                // Retain Time mapping for consistency, though it's not explicitly requested to display
+                Time: item.Time || item['Time'] || '-',
             }));
         }
 
@@ -374,8 +380,8 @@
                 // Combine data from both sheets
                 const combinedData = filteredData1.concat(filteredData2);
                 
-                // Define the desired columns for the combined table
-                const combinedColumns = ['Source', 'Station', 'ระดับน้ำ (ม.)', 'Time']; 
+                // Define the desired columns for the combined table (Updated based on user input)
+                const combinedColumns = ['Source', 'จุดวัด', 'ระดับน้ำปัจจุบัน', 'ระดับน้ำครั้งก่อน', 'ส่วนต่างระดับน้ำ', 'ระดับการแจ้งเตือน']; 
                 
                 // Generate and render HTML
                 if (combinedData.length > 0) {
