@@ -187,10 +187,10 @@
         /**
          * จัดรูปแบบการแสดงผลของคอลัมน์ "ส่วนต่างระดับน้ำ" พร้อมสีและไอคอนสามเหลี่ยม
          * @param {string | number} value - ค่าส่วนต่างระดับน้ำ (อาจเป็น String จาก CSV)
+         * @param {string} [unit=' รทก.'] - หน่วยที่ต้องการแสดง (' รทก.' หรือ ' ลบ.ม./วิ')
          * @returns {string} HTML string ที่มีสีและไอคอน
          */
-        function formatDifference(value) {
-            const unit = ' รทก.'; // หน่วยที่ใช้ร่วมกัน
+        function formatDifference(value, unit = ' รทก.') { // เพิ่มพารามิเตอร์ unit พร้อมค่าเริ่มต้น
             
             // 1. แปลงค่าเป็นตัวเลข
             const numValue = parseFloat(value);
@@ -320,7 +320,8 @@
                 // ใช้ formatLevelWithUnit สำหรับ รทก./MSL. (Fixed to 2 decimals)
                 'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], DEFAULT_UNIT_LEVEL, true, false),
                 'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], DEFAULT_UNIT_LEVEL, true, false),
-                'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ']),
+                // ใช้ ' รทก.' เป็นหน่วยสำหรับส่วนต่างระดับน้ำในเมืองทองธานี
+                'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ'], ' รทก.'), 
                 'ระดับการแจ้งเตือน': formatStatusBadge(item['ระดับการแจ้งเตือน']),
             }));
         }
@@ -328,7 +329,7 @@
         /**
          * Sheet 2: กรองข้อมูลเฉพาะ 5 จุดวัดที่ระบุ
          * **แก้ไข:** นำลอจิกการกรองที่ใช้ `includes` ออก เพื่อใช้ข้อมูลทั้งหมดที่ดึงมา
-         * **แก้ไข:** สำหรับ "เขื่อนเจ้าพระยา" จะไม่แปลงค่าเป็นทศนิยม และจัดการคอมมา
+         * **แก้ไข:** สำหรับ "เขื่อนเจ้าพระยา" จะไม่แปลงค่าเป็นทศนิยม และจัดการคอมมา พร้อมเปลี่ยนหน่วยส่วนต่างระดับน้ำ
          * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2
          * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source และหน่วยวัด
          */
@@ -339,12 +340,14 @@
                 const station = item['จุดวัด'] || '-';
                 
                 // กำหนดหน่วยวัดและรูปแบบการแสดงผล
-                let unit = DEFAULT_UNIT_LEVEL;
+                let levelUnit = DEFAULT_UNIT_LEVEL;
+                let diffUnit = ' รทก.'; // หน่วยเริ่มต้นสำหรับส่วนต่างระดับน้ำ
                 let fixedTwoDecimal = true;
                 let isChaophraya = false;
 
                 if (station === 'เขื่อนเจ้าพระยา') {
-                    unit = CHAOPHRAYA_UNIT_LEVEL;
+                    levelUnit = CHAOPHRAYA_UNIT_LEVEL; // 'ลบ.ม./วิ'
+                    diffUnit = ' ลบ.ม./วิ'; // *** แก้ไขตามคำขอ: หน่วยส่วนต่างระดับน้ำเป็น ลบ.ม./วิ ***
                     fixedTwoDecimal = false; // ไม่แปลงค่าเป็นทศนิยม 2 ตำแหน่ง
                     isChaophraya = true; // ตั้งค่าสถานะเพื่อจัดการคอมมาใน formatLevelWithUnit
                 }
@@ -353,9 +356,10 @@
                     Source: 'แม่น้ำเจ้าพระยา', 
                     'จุดวัด': station,
                     // เพิ่มหน่วยวัดตามเงื่อนไข
-                    'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], unit, fixedTwoDecimal, isChaophraya),
-                    'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], unit, fixedTwoDecimal, isChaophraya),
-                    'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ']),
+                    'ระดับน้ำปัจจุบัน': formatLevelWithUnit(item['ระดับน้ำปัจจุบัน'], levelUnit, fixedTwoDecimal, isChaophraya),
+                    'ระดับน้ำครั้งก่อน': formatLevelWithUnit(item['ระดับน้ำครั้งก่อน'], levelUnit, fixedTwoDecimal, isChaophraya),
+                    // ใช้หน่วยส่วนต่างระดับน้ำที่กำหนดไว้
+                    'ส่วนต่างระดับน้ำ': formatDifference(item['ส่วนต่างระดับน้ำ'], diffUnit),
                     'ระดับการแจ้งเตือน': formatStatusBadge(item['ระดับการแจ้งเตือน']),
                 };
             }).filter(item => item['จุดวัด'] !== '-'); // กรองรายการที่ไม่มีชื่อจุดวัดออก
