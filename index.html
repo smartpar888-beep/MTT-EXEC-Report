@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>การบริหารจัดการน้ำเมืองทองธานี - รวมระดับน้ำ</title>
+    
+    <!-- Google Font KANIT -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- D3.js CDN for charts -->
+    <script src="https://d3js.org/d3.v7.min.js"></script> 
+    
+    <style>
+        /* 1. Dashboard ทั้งหมดให้ใช้ Font "google KANIT" */
+        :root {
+            font-family: 'Kanit', sans-serif;
+        }
+        
+        /* -------------------------------------------------------- */
+        /* CRITICAL FIX: Body & HTML Layout for Mobile Scrolling */
+        /* -------------------------------------------------------- */
+        html, body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh; 
+        }
+
+        /* Container for the overall layout: uses flex-col to stack header/main/footer */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="app-container">
+        <!-- Header -->
+        <header class="bg-white shadow-md p-4 sticky top-0 z-10">
+            <div class="max-w-7xl mx-auto flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-indigo-700 flex items-center">
+                    <i data-lucide="droplet" class="w-7 h-7 mr-2 text-indigo-500"></i>
+                    ระบบบริหารจัดการน้ำ (เมืองทองธานี)
+                </h1>
+                <div class="flex items-center space-x-4">
+                    <p id="current-time" class="text-sm text-gray-600 font-medium"></p>
+                    <button id="refresh-button" class="p-2 bg-indigo-500 text-white rounded-lg shadow-md hover:bg-indigo-600 transition flex items-center" title="โหลดข้อมูลใหม่">
+                        <i data-lucide="rotate-cw" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow max-w-7xl mx-auto p-4 md:p-8 w-full space-y-8">
+
+            <!-- 1. Combined Water Level Data (Sheet 1 & 2) - MOVED TO TOP -->
+            <h2 class="text-xl font-semibold text-gray-700 border-b pb-2 flex items-center">
+                <i data-lucide="waves" class="w-5 h-5 mr-2 text-blue-600"></i>
+                ระดับน้ำทั้งหมด (เมืองทองธานี และ เจ้าพระยา)
+            </h2>
+            <div id="data-sheet-combined-water-level" class="bg-white p-6 rounded-xl shadow-lg min-h-[200px] flex items-center justify-center text-gray-500">
+                <!-- Combined Data will be rendered here -->
+                กำลังโหลดข้อมูลระดับน้ำ...
+            </div>
+
+            <!-- 2. Card Section for Sheet 3 (Pump Summary) - MOVED TO BOTTOM -->
+            <h2 class="text-xl font-semibold text-gray-700 border-b pb-2 pt-4 flex items-center">
+                <i data-lucide="gauge" class="w-5 h-5 mr-2 text-red-500"></i> 
+                สรุปสถานะเครื่องสูบน้ำ (Sheet 3)
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                
+                <!-- Total Stations Card -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border-b-4 border-indigo-500 hover:shadow-xl transition duration-300">
+                    <p class="text-sm font-medium text-gray-500 mb-2 flex items-center">
+                         <i data-lucide="wrench" class="w-4 h-4 mr-1"></i>
+                        สถานีสูบน้ำทั้งหมด
+                    </p>
+                    <p id="total-pump-stations" class="text-5xl font-extrabold text-indigo-700">0</p>
+                    <p class="text-sm text-gray-400 mt-2">หน่วย: สถานี</p>
+                </div>
+
+                <!-- Normal Stations Card -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border-b-4 border-green-500 hover:shadow-xl transition duration-300">
+                    <p class="text-sm font-medium text-gray-500 mb-2 flex items-center">
+                        <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i>
+                        สถานะปกติ
+                    </p>
+                    <p id="normal-pump-stations" class="text-5xl font-extrabold text-green-600">0</p>
+                    <p class="text-sm text-gray-400 mt-2">หน่วย: สถานี</p>
+                </div>
+            </div>
+            
+        </main>
+    </div>
+    
+    <!-- Modal for Inspection Details (Kept for completeness) -->
+    <div id="inspection-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md transform transition-all duration-300 scale-95 opacity-0" id="modal-content">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-lg font-semibold text-gray-800 flex items-center">
+                    <i data-lucide="clipboard-list" class="w-6 h-6 mr-2 text-indigo-600"></i>
+                    ข้อมูลการเข้าตรวจสถานี
+                </h3>
+                <button id="modal-close-button" class="text-gray-400 hover:text-gray-600 transition" onclick="closeInspectionModal()">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <p class="text-gray-600">
+                    <span class="font-semibold text-gray-800">สถานี:</span> 
+                    <span id="modal-station-name" class="text-indigo-700 font-bold"></span>
+                </p>
+                <div class="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                    <p class="text-sm text-gray-500 mb-1">จำนวนครั้งที่เข้าตรวจ (สะสม)</p>
+                    <p id="modal-inspection-count" class="text-4xl font-extrabold text-blue-600">
+                        0
+                    </p>
+                    <p class="text-xs text-gray-500 mt-2">* ข้อมูลจากคอลัมน์ที่ท่านกำหนดใน USER_COLUMN_NAMES</p>
+                </div>
+            </div>
+            
+            <div class="mt-6 flex justify-end">
+                <button type="button" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition" onclick="closeInspectionModal()">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- GLOBAL CONFIG & FIREBASE INIT (REQUIRED) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth, userId = null;
+        let isAuthReady = false;
+
+        if (firebaseConfig) {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            // Authentication setup
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    userId = user.uid;
+                    isAuthReady = true;
+                    console.log("Firebase Auth Ready. User ID:", userId);
+                    // Start data fetch once auth is ready
+                    fetchDashboardData();
+                } else {
+                    console.log("No user signed in. Attempting anonymous sign-in.");
+                    signInAnonymously(auth).catch(e => console.error("Anonymous sign-in failed:", e));
+                }
+            });
+            
+            if (initialAuthToken) {
+                signInWithCustomToken(auth, initialAuthToken).catch(e => console.error("Custom token sign-in failed:", e));
+            }
+        } else {
+            console.error("Firebase config is missing. Data fetching will be mocked.");
+            // Mock data fetch if Firebase is not configured
+            setTimeout(fetchDashboardData, 1000); 
+        }
+        
+        // Helper function for UI updates
+        const updateTime = () => {
+            const now = new Date();
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Bangkok' };
+            document.getElementById('current-time').textContent = now.toLocaleDateString('th-TH', options);
+        };
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        // Apply Lucide icons
+        lucide.createIcons();
+
+        // -------------------------------------------------------------
+        // MOCK DATA CONFIGURATION (Replace with your actual URLs)
+        // -------------------------------------------------------------
+        const DATA_CONFIG = [
+            { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT452CdpcF_hoA-_x3a6Ji0YKeWTuSr_9CM0We83aAAPiBWMRoHrKEujaYtEzHMZYMLEL8wKa10NPYF/pub?gid=675852265&single=true&output=csv', type: 'WATER_LEVEL_MTT' },
+            { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT5OYSm3Hn1V4kegJf9x3iK2OGvUIL7vbnWryNUsx15VCm4NdxoVoWZMx1vWTlKcZskeD-YYjhbKn2V/pub?gid=202563025&single=true&output=csv' },
+            { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTyPcfGQReUPOHckF-6bA4UOucC8cbqRvHj-aTP7uWRkBjvQ4HrieGIhcet4OH9O0DjT_M2FM3QaaV9/pub?gid=273571070&single=true&output=csv', type: 'PUMP_STATUS' }
+        ];
+
+        // -------------------------------------------------------------
+        // PROCESSOR FUNCTIONS (Now return arrays for Sheet 1 & 2)
+        // -------------------------------------------------------------
+
+        /**
+         * Sheet 1: กรองข้อมูลเฉพาะ Lakeside เมืองทองธานี และ สะพานข้ามคลองบางพูด มสธ.
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 1
+         * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source
+         */
+        function processSheet1Data(rawData) {
+            console.log("Processing Sheet 1: Filtering data...");
+            const targetStations = ['Lakeside เมืองทองธานี', 'สะพานข้ามคลองบางพูด มสธ.'];
+
+            const filteredData = rawData.filter(item => {
+                return item.Station && targetStations.some(target => item.Station.includes(target));
+            });
+            
+            // Standardize/Add Source for combined view
+            return filteredData.map(item => ({
+                Source: 'เมืองทองธานี', 
+                Station: item.Station || '-',
+                'ระดับน้ำ (ม.)': item.Level !== undefined ? item.Level : '-',
+                Time: item.Time || '-',
+                // Ignore other columns like 'Status' for the combined level table
+            }));
+        }
+
+        /**
+         * Sheet 2: แสดงข้อมูลทั้งหมด
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2
+         * @returns {Array<Object>} ข้อมูลทั้งหมด พร้อมเพิ่มคอลัมน์ Source
+         */
+        function processSheet2Data(rawData) {
+            console.log("Processing Sheet 2: Showing all data...");
+            // Standardize/Add Source for combined view
+            return rawData.map(item => ({
+                Source: 'แม่น้ำเจ้าพระยา', 
+                Station: item.Location || '-',
+                'ระดับน้ำ (ม.)': item.Depth !== undefined ? item.Depth : '-',
+                Time: item.Time || '-',
+            }));
+        }
+
+        /**
+         * Sheet 3: สรุปจำนวนสถานีทั้งหมดและสถานะปกติ
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 3
+         * @returns {null} ไม่ส่งคืน HTML แต่จะอัปเดตตัวเลขใน Card โดยตรง
+         */
+        function processSheet3Data(rawData) {
+            console.log("Processing Sheet 3: Aggregating summary...");
+            
+            // 1. จำนวนสถานีทั้งหมด
+            const totalStations = rawData.length;
+            
+            // 2. จำนวนสถานีที่มีสถานะ 'ปกติ'
+            // สมมติว่าสถานะอยู่ในคอลัมน์ชื่อ 'Status'
+            const normalStations = rawData.filter(item => item.Status === 'ปกติ').length;
+
+            // อัปเดต UI Card
+            const totalEl = document.getElementById('total-pump-stations');
+            const normalEl = document.getElementById('normal-pump-stations');
+
+            if (totalEl) totalEl.textContent = totalStations.toLocaleString('th-TH');
+            if (normalEl) normalEl.textContent = normalStations.toLocaleString('th-TH');
+
+            console.log(`Summary: Total=${totalStations}, Normal=${normalStations}`);
+            return null;
+        }
+
+        // -------------------------------------------------------------
+        // MOCK/HELPER FUNCTIONS
+        // -------------------------------------------------------------
+
+        /**
+         * [MOCK] จำลองการดึงข้อมูลจาก Google Sheet
+         */
+        async function fetchGoogleSheetData(url) {
+            // Mock Data based on expected structure for demonstration
+            if (url.includes('YOUR_SHEET_URL_1_HERE')) {
+                // Sheet 1: เมืองทองธานี (Station, Level, Time, Status)
+                return [
+                    { Station: '1. Lakeside เมืองทองธานี', Level: 1.50, Time: '10:00', Status: 'ปกติ' },
+                    { Station: '2. จุดวัดคลองประปา', Level: 0.80, Time: '10:00', Status: 'เฝ้าระวัง' },
+                    { Station: '8. สะพานข้ามคลองบางพูด มสธ.', Level: 2.10, Time: '10:00', Status: 'วิกฤต' },
+                    { Station: '10. ตรอกข้าวสาร', Level: 0.50, Time: '10:00', Status: 'ปกติ' },
+                ];
+            } else if (url.includes('YOUR_SHEET_URL_2_HERE')) {
+                // Sheet 2: เจ้าพระยา (Location, Depth, Max, Time)
+                return [
+                    { Location: 'สะพานพระราม 7', Depth: 1.25, Max: 3.00, Time: '10:05' },
+                    { Location: 'สะพานพระราม 9', Depth: 1.55, Max: 3.50, Time: '10:05' },
+                    { Location: 'บางไทร อยุธยา', Depth: 3.10, Max: 4.00, Time: '10:10' },
+                ];
+            } else if (url.includes('YOUR_SHEET_URL_3_HERE')) {
+                // Sheet 3: สถานะปั๊ม (Station, Status, LastCheck)
+                return [
+                    { Station: 'ปั๊มA', Status: 'ปกติ', LastCheck: '10:00' },
+                    { Station: 'ปั๊มB', Status: 'ปกติ', LastCheck: '10:00' },
+                    { Station: 'ปั๊มC', Status: 'วิกฤต', LastCheck: '10:00' },
+                    { Station: 'ปั๊มD', Status: 'ปกติ', LastCheck: '10:00' },
+                    { Station: 'ปั๊มE', Status: 'เสีย', LastCheck: '10:00' },
+                ];
+            }
+            return [];
+        }
+
+        /**
+         * สร้าง HTML สำหรับตารางข้อมูล (รับมือกับคอลัมน์ที่อาจมีค่าเป็น undefined ได้)
+         */
+        function generateDataTableHtml(data, columns) {
+            if (!data || data.length === 0) {
+                return '<p class="text-center text-gray-500">ไม่มีข้อมูลที่ต้องแสดง</p>';
+            }
+
+            // 1. Header Row
+            const headerHtml = `
+                <tr>
+                    ${columns.map(col => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${col}</th>`).join('')}
+                </tr>
+            `;
+
+            // 2. Body Rows
+            const bodyHtml = data.map(row => `
+                <tr class="hover:bg-gray-50 transition duration-150">
+                    ${columns.map(col => {
+                        // ดึงค่าจาก row โดยใช้ชื่อคอลัมน์ ถ้าไม่มีให้เป็น '-'
+                        const cellValue = row[col] !== undefined ? row[col] : '-';
+                        return `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${cellValue}</td>`;
+                    }).join('')}
+                </tr>
+            `).join('');
+
+            return `
+                <div class="overflow-x-auto w-full">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">${headerHtml}</thead>
+                        <tbody class="bg-white divide-y divide-gray-200">${bodyHtml}</tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        // -------------------------------------------------------------
+        // MAIN FETCH AND RENDER LOGIC (Refactored)
+        // -------------------------------------------------------------
+
+        async function fetchDashboardData() {
+            console.log("Starting dashboard data fetch (Combined)...");
+            
+            const combinedEl = document.getElementById('data-sheet-combined-water-level');
+            combinedEl.innerHTML = '<p class="text-center text-indigo-500 font-semibold flex items-center justify-center"><i data-lucide="loader" class="w-5 h-5 mr-2 animate-spin"></i> กำลังโหลดข้อมูลระดับน้ำ...</p>';
+
+            // 1. Fetch and Process Water Level Data (Sheet 1 & 2) concurrently
+            try {
+                const [rawData1, rawData2] = await Promise.all([
+                    fetchGoogleSheetData(DATA_CONFIG[0].url),
+                    fetchGoogleSheetData(DATA_CONFIG[1].url)
+                ]);
+
+                // Process (filter/standardize) the data
+                const filteredData1 = processSheet1Data(rawData1);
+                const allData2 = processSheet2Data(rawData2);
+                
+                // Combine data from both sheets
+                const combinedData = filteredData1.concat(allData2);
+                
+                // Define the desired columns for the combined table
+                const combinedColumns = ['Source', 'Station', 'ระดับน้ำ (ม.)', 'Time']; 
+                
+                // Generate and render HTML
+                if (combinedData.length > 0) {
+                    combinedEl.innerHTML = generateDataTableHtml(combinedData, combinedColumns);
+                } else {
+                    combinedEl.innerHTML = '<p class="text-center text-gray-500">ไม่พบข้อมูลระดับน้ำใดๆ</p>';
+                }
+
+            } catch (error) {
+                console.error("Error fetching combined water level data:", error);
+                combinedEl.innerHTML = `<p class="text-center text-red-500 font-semibold">เกิดข้อผิดพลาดในการโหลดข้อมูลระดับน้ำ: ${error.message}</p>`;
+            }
+            
+            // 2. Fetch and Process Pump Status Data (Sheet 3)
+            try {
+                const rawData3 = await fetchGoogleSheetData(DATA_CONFIG[2].url);
+                processSheet3Data(rawData3); // Updates cards directly
+            } catch (error) {
+                console.error("Error fetching pump status data:", error);
+                // Note: The UI is already showing 0, so no need for explicit error message here.
+            }
+
+            // Re-apply icons after content update
+            lucide.createIcons();
+        }
+
+        document.getElementById('refresh-button').addEventListener('click', fetchDashboardData);
+        
+        // Initial call if not using Firebase (or after Firebase auth setup)
+        if (!firebaseConfig || isAuthReady) {
+             fetchDashboardData();
+        }
+
+    </script>
+</body>
+</html>
