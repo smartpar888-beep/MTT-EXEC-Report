@@ -193,7 +193,7 @@
         const DATA_CONFIG = [
             // Example of a correct CSV URL: https://docs.google.com/spreadsheets/d/e/2PACX-1vRzTzL.../pub?gid=0&single=true&output=csv
             { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT452CdpcF_hoA-_x3a6Ji0YKeWTuSr_9CM0We83aAAPiBWMRoHrKEujaYtEzHMZYMLEL8wKa10NPYF/pub?gid=675852265&single=true&output=csv', type: 'WATER_LEVEL_MTT' },
-            { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT5OYSm3Hn1V4kegJf9x3iK2OGvUIL7vbnWryNUsx15VCm4NdxoVoWZMx1vWTlKcZskeD-YYjhbKn2V/pub?gid=202563025&single=true&output=csv' },
+            { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT5OYSm3Hn1V4kegJf9x3iK2OGvUIL7vbnWryNUsx15VCm4NdxoVoWZMx1vWTlKcZskeD-YYjhbKn2V/pub?gid=202563025&single=true&output=csv', type: 'WATER_LEVEL_CPY' },
             { url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTyPcfGQReUPOHckF-6bA4UOucC8cbqRvHj-aTP7uWRkBjvQ4HrieGIhcet4OH9O0DjT_M2FM3QaaV9/pub?gid=273571070&single=true&output=csv', type: 'PUMP_STATUS' }
         ];
 
@@ -207,38 +207,50 @@
          * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source
          */
         function processSheet1Data(rawData) {
-            console.log("Processing Sheet 1: Filtering data...");
-            // Column names are case-sensitive and must match your CSV header
+            console.log("Processing Sheet 1: Filtering data for specific Muangthong locations...");
+            // จุดที่ 1. Lakeside เมืองทองธานี, จุดที่ 8. สะพานข้ามคลองบางพูด มสธ.
             const targetStations = ['Lakeside เมืองทองธานี', 'สะพานข้ามคลองบางพูด มสธ.'];
 
             const filteredData = rawData.filter(item => {
-                // Assuming your CSV header for the station name is 'Station'
+                // ใช้ includes() เพื่อให้มีความยืดหยุ่นในการจับคู่ชื่อสถานี
                 return item.Station && targetStations.some(target => item.Station.includes(target));
             });
             
             // Standardize/Add Source for combined view
+            // NOTE: Check your CSV headers. Assuming 'Station', 'Level', 'Time'
             return filteredData.map(item => ({
                 Source: 'เมืองทองธานี', 
                 Station: item.Station || '-',
-                // Assuming your CSV header for water level is 'Level'
                 'ระดับน้ำ (ม.)': item.Level !== undefined ? item.Level : '-',
                 Time: item.Time || '-',
             }));
         }
 
         /**
-         * Sheet 2: แสดงข้อมูลทั้งหมด
+         * Sheet 2: กรองข้อมูลเฉพาะ 5 จุดวัดที่ระบุ
          * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 2 (คอลัมน์: Location, Depth, Time)
-         * @returns {Array<Object>} ข้อมูลทั้งหมด พร้อมเพิ่มคอลัมน์ Source
+         * @returns {Array<Object>} ข้อมูลที่ผ่านการกรองแล้ว พร้อมเพิ่มคอลัมน์ Source
          */
         function processSheet2Data(rawData) {
-            console.log("Processing Sheet 2: Showing all data...");
+            console.log("Processing Sheet 2: Filtering data for specific Chaophraya locations...");
+            const targetLocations = [
+                'เขื่อนเจ้าพระยา',
+                'ท่าน้ำปากเกร็ดวัน',
+                'เกาะพญาเจ่ง',
+                'ประตูน้ำปากเกร็ด 13',
+                'คลองบางพูดเชื่อมคลองส่วย'
+            ];
+
+            const filteredData = rawData.filter(item => {
+                // NOTE: Check your CSV header. Assuming 'Location'
+                return item.Location && targetLocations.includes(item.Location);
+            });
+
             // Standardize/Add Source for combined view
-            return rawData.map(item => ({
+            // NOTE: Check your CSV headers. Assuming 'Location', 'Depth', 'Time'
+            return filteredData.map(item => ({
                 Source: 'แม่น้ำเจ้าพระยา', 
-                // Assuming your CSV header for the location name is 'Location'
                 Station: item.Location || '-',
-                // Assuming your CSV header for water level is 'Depth'
                 'ระดับน้ำ (ม.)': item.Depth !== undefined ? item.Depth : '-',
                 Time: item.Time || '-',
             }));
@@ -246,24 +258,27 @@
 
         /**
          * Sheet 3: สรุปจำนวนสถานีทั้งหมดและสถานะปกติ
-         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 3 (คอลัมน์: Station, Status, LastCheck)
+         * @param {Array<Object>} rawData - ข้อมูลดิบจาก Sheet 3 (คอลัมน์: Station, สถานะปั๊ม, LastCheck)
          * @returns {null} ไม่ส่งคืน HTML แต่จะอัปเดตตัวเลขใน Card โดยตรง
          */
         function processSheet3Data(rawData) {
             console.log("Processing Sheet 3: Aggregating summary...");
             
-            // 1. จำนวนสถานีทั้งหมด
+            // 1. จำนวนสถานีทั้งหมด (อัปเดตทันที)
             const totalStations = rawData.length;
+            const totalEl = document.getElementById('total-pump-stations');
+            if (totalEl) totalEl.textContent = totalStations.toLocaleString('th-TH');
             
             // 2. จำนวนสถานีที่มีสถานะ 'ปกติ'
-            // Assuming your CSV header for status is 'Status'
-            const normalStations = rawData.filter(item => item.Status === 'ปกติ').length;
+            // แก้ไข: ใช้ชื่อคอลัมน์ตามที่ผู้ใช้แจ้งคือ 'สถานะปั๊ม'
+            const STATUS_COLUMN_NAME = 'สถานะปั๊ม'; 
+            const normalStations = rawData.filter(item => {
+                // ตรวจสอบชื่อคอลัมน์ที่คาดหวัง
+                return item[STATUS_COLUMN_NAME] === 'ปกติ';
+            }).length;
 
-            // อัปเดต UI Card
-            const totalEl = document.getElementById('total-pump-stations');
+            // อัปเดต UI Card สำหรับสถานะปกติ
             const normalEl = document.getElementById('normal-pump-stations');
-
-            if (totalEl) totalEl.textContent = totalStations.toLocaleString('th-TH');
             if (normalEl) normalEl.textContent = normalStations.toLocaleString('th-TH');
 
             console.log(`Summary: Total=${totalStations}, Normal=${normalStations}`);
@@ -294,7 +309,8 @@
                 return data;
             } catch (error) {
                 console.error("Error fetching or parsing CSV:", error);
-                throw new Error(`ไม่สามารถโหลดข้อมูลจาก URL นี้ได้ อาจเป็นเพราะ CORS, URL ผิด, หรือข้อมูลไม่พร้อมใช้งาน: ${url}`);
+                // Throw a specific error message for the user to see in the UI
+                throw new Error(`ไม่สามารถโหลดข้อมูลจาก URL นี้ได้: ${url}. โปรดตรวจสอบ URL, การเผยแพร่, และชื่อคอลัมน์ใน Sheet`);
             }
         }
 
@@ -303,7 +319,7 @@
          */
         function generateDataTableHtml(data, columns) {
             if (!data || data.length === 0) {
-                return '<p class="text-center text-gray-500">ไม่มีข้อมูลที่ต้องแสดง</p>';
+                return '<p class="text-center text-gray-500">ไม่มีข้อมูลที่ต้องแสดง (โปรดตรวจสอบ URL และชื่อคอลัมน์ใน CSV)</p>';
             }
 
             // 1. Header Row
@@ -353,10 +369,10 @@
 
                 // Process (filter/standardize) the data
                 const filteredData1 = processSheet1Data(rawData1);
-                const allData2 = processSheet2Data(rawData2);
+                const filteredData2 = processSheet2Data(rawData2); 
                 
                 // Combine data from both sheets
-                const combinedData = filteredData1.concat(allData2);
+                const combinedData = filteredData1.concat(filteredData2);
                 
                 // Define the desired columns for the combined table
                 const combinedColumns = ['Source', 'Station', 'ระดับน้ำ (ม.)', 'Time']; 
@@ -365,7 +381,7 @@
                 if (combinedData.length > 0) {
                     combinedEl.innerHTML = generateDataTableHtml(combinedData, combinedColumns);
                 } else {
-                    combinedEl.innerHTML = '<p class="text-center text-red-500 font-semibold">ไม่พบข้อมูล (โปรดตรวจสอบ URL และ Header ของ CSV)</p>';
+                    combinedEl.innerHTML = '<p class="text-center text-red-500 font-semibold">ไม่พบข้อมูลที่ผ่านการกรองแล้ว (โปรดตรวจสอบ URL และ Header ของ CSV)</p>';
                 }
 
             } catch (error) {
@@ -375,11 +391,17 @@
             
             // 2. Fetch and Process Pump Status Data (Sheet 3)
             try {
+                // แสดงสถานะโหลดก่อน
+                const totalEl = document.getElementById('total-pump-stations');
+                const normalEl = document.getElementById('normal-pump-stations');
+                if (totalEl) totalEl.textContent = '...';
+                if (normalEl) normalEl.textContent = '...';
+                
                 const rawData3 = await fetchGoogleSheetData(DATA_CONFIG[2].url);
                 processSheet3Data(rawData3); // Updates cards directly
             } catch (error) {
                 console.error("Error fetching pump status data:", error);
-                // Note: The UI is already showing 0, so no need for explicit error message here.
+                // แสดง Err หากดึงข้อมูลไม่ได้
                 const totalEl = document.getElementById('total-pump-stations');
                 const normalEl = document.getElementById('normal-pump-stations');
                 if (totalEl) totalEl.textContent = 'Err';
